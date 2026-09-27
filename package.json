@@ -1,0 +1,11 @@
+{
+  "name": "vaccine-box-dispatch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "社区药房冷藏疫苗箱借还调度系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.test.js"
+  }
+}

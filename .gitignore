@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 # Common local artifacts
+data.json
 Thumbs.db
 vendor/
 build/
