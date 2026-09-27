@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>社区药房 · 冷藏疫苗箱借还管理</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f4f8; color: #1f2937; }
+  header { background: #0e7490; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; }
+  header .meta { font-size: 13px; opacity: .9; }
+  main { max-width: 1200px; margin: 20px auto; padding: 0 16px; display: grid; gap: 16px; }
+  section { background: #fff; border-radius: 10px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  section h2 { font-size: 15px; color: #0e7490; margin-bottom: 12px; border-left: 4px solid #0e7490; padding-left: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: middle; }
+  th { background: #f8fafc; color: #475569; white-space: nowrap; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .t-available { background: #dcfce7; color: #15803d; }
+  .t-issued { background: #dbeafe; color: #1d4ed8; }
+  .t-pending_review { background: #fef9c3; color: #a16207; }
+  .t-exception { background: #fee2e2; color: #b91c1c; }
+  .t-pending { background: #ffedd5; color: #c2410c; }
+  .t-returned { background: #fef9c3; color: #a16207; }
+  .t-closed { background: #e5e7eb; color: #4b5563; }
+  .t-expired { background: #fee2e2; color: #b91c1c; }
+  button { background: #0e7490; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  button:hover { background: #155e75; }
+  button.ghost { background: #fff; color: #0e7490; border: 1px solid #0e7490; }
+  button.danger { background: #b91c1c; }
+  button:disabled { background: #cbd5e1; cursor: not-allowed; }
+  input, select, textarea { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #67e8f9; border-color: #0e7490; }
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .form-row label { font-size: 13px; color: #475569; display: flex; align-items: center; gap: 4px; }
+  .form-row input, .form-row select { width: auto; }
+  .msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .msg.err { color: #b91c1c; }
+  .msg.ok { color: #15803d; }
+  .warn { color: #b91c1c; font-size: 12px; }
+  .muted { color: #94a3b8; font-size: 12px; }
+  .times { font-size: 12px; color: #64748b; line-height: 1.7; }
+  .event-log { max-height: 260px; overflow-y: auto; font-size: 13px; }
+  .event-log li { padding: 6px 4px; border-bottom: 1px dashed #e5e7eb; list-style: none; }
+  .event-log .time { color: #0e7490; font-family: monospace; margin-right: 8px; }
+  .empty { color: #94a3b8; font-size: 13px; padding: 10px 0; }
+  .review-box { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>社区药房 · 冷藏疫苗箱借还管理</h1>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <!-- 箱体看板 -->
+  <section>
+    <h2>箱体看板</h2>
+    <table>
+      <thead><tr><th>箱号</th><th>容量</th><th>消毒有效期至</th><th>状态</th><th>当前借单</th><th>最近复核结论</th></tr></thead>
+      <tbody id="boxRows"></tbody>
+    </table>
+  </section>
+
+  <div class="grid2">
+    <!-- 护士提交 -->
+    <section>
+      <h2>① 护士提交借箱单</h2>
+      <div class="form-row">
+        <label>护士 <input id="fNurse" placeholder="姓名"></label>
+        <label>需求容量 <input id="fCap" type="number" min="1" step="1" style="width:80px"> L</label>
+        <label>备注 <input id="fNote" placeholder="可选"></label>
+        <button onclick="submitOrder()">提交借箱单</button>
+      </div>
+      <div class="msg" id="submitMsg"></div>
+    </section>
+
+    <!-- 调度台 -->
+    <section>
+      <h2>② 调度台 · 确认发放 / 改派</h2>
+      <div class="form-row" style="margin-bottom:8px">
+        <label>调度员 <input id="fDispatcher" placeholder="姓名"></label>
+      </div>
+      <div id="pendingOrders"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <!-- 在途借单 -->
+    <section>
+      <h2>③ 在途借单 · 归还登记</h2>
+      <div id="issuedOrders"></div>
+    </section>
+
+    <!-- 复核区 -->
+    <section>
+      <h2>④ 复核区（待复核 / 异常区）</h2>
+      <p class="muted" style="margin-bottom:8px">未经复核放行的箱子不得再次借出；复核放行后原借单结束。</p>
+      <div id="reviewArea"></div>
+    </section>
+  </div>
+
+  <!-- 已结束借单 -->
+  <section>
+    <h2>已结束借单（交接时间留痕）</h2>
+    <div id="closedOrders"></div>
+  </section>
+
+  <!-- 流水 -->
+  <section>
+    <h2>交接时间流水 / 异常结论</h2>
+    <ul class="event-log" id="eventLog"></ul>
+  </section>
+</main>
+
+<script>
+let STATE = null;
+const BOX_STATUS = { available: '可用', issued: '已借出', pending_review: '待复核', exception: '异常区' };
+const ORDER_STATUS = { pending: '待确认', issued: '已借出', returned: '已归还待复核', closed: '已结束' };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, body) {
+  const res = await fetch(path, body !== undefined
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : {});
+  return { status: res.status, data: await res.json() };
+}
+
+async function loadState() {
+  // 用户正在输入时跳过本轮刷新，避免打断填写
+  const a = document.activeElement;
+  if (a && ['INPUT', 'SELECT', 'TEXTAREA'].includes(a.tagName)) return;
+  const { data } = await api('/api/state');
+  STATE = data;
+  render();
+}
+
+function issuable(b, cap) {
+  return b.status === 'available' && b.capacity >= cap && b.disinfectionValidUntil >= STATE.meta.today;
+}
+
+function render() {
+  const { boxes, orders, returns, reviews, events, meta } = STATE;
+  document.getElementById('meta').textContent =
+    `冷链标准 ${meta.tempMin}–${meta.tempMax}°C ｜ 今天 ${meta.today} ｜ 未复核不得再借`;
+
+  // 箱体看板
+  document.getElementById('boxRows').innerHTML = boxes.map((b) => {
+    const expired = b.disinfectionValidUntil < meta.today;
+    const order = orders.find((o) => o.id === b.currentOrderId);
+    const lastReview = reviews.find((r) => r.boxId === b.id);
+    return `<tr>
+      <td><b>${esc(b.code)}</b></td>
+      <td>${b.capacity}L</td>
+      <td>${b.disinfectionValidUntil} ${expired ? '<span class="tag t-expired">已过期</span>' : ''}</td>
+      <td><span class="tag t-${b.status}">${BOX_STATUS[b.status]}</span></td>
+      <td>${order ? esc(order.id) + '（' + esc(order.nurse) + '）' : '<span class="muted">—</span>'}</td>
+      <td>${lastReview ? `<span class="${lastReview.decision === 'hold' ? 'warn' : ''}">${esc(lastReview.conclusion)}</span> <span class="muted">${esc(lastReview.reviewedAt)}</span>` : '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  // 待确认订单（调度台）
+  const pending = orders.filter((o) => o.status === 'pending');
+  document.getElementById('pendingOrders').innerHTML = pending.length ? pending.map((o) => {
+    const opts = boxes.filter((b) => issuable(b, o.requiredCapacity));
+    return `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px">
+      <div><b>${esc(o.id)}</b> ｜ ${esc(o.nurse)} ｜ 需求 ${o.requiredCapacity}L ${o.note ? '｜ ' + esc(o.note) : ''}
+        <span class="muted">提交于 ${esc(o.submittedAt)}</span></div>
+      <div class="form-row" style="margin-top:6px">
+        <select id="boxSel_${o.id}">
+          ${opts.length ? opts.map((b) => `<option value="${b.id}">${esc(b.code)}（${b.capacity}L，消毒至 ${b.disinfectionValidUntil}）</option>`).join('')
+                        : '<option value="">无可用箱</option>'}
+        </select>
+        <button ${opts.length ? '' : 'disabled'} onclick="confirmOrder('${o.id}')">确认发放（占整箱）</button>
+        <span class="msg err" id="msg_${o.id}"></span>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">暂无待确认借箱单</div>';
+
+  // 在途借单（归还）
+  const issued = orders.filter((o) => o.status === 'issued');
+  document.getElementById('issuedOrders').innerHTML = issued.length ? issued.map((o) => `
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px">
+      <div><b>${esc(o.id)}</b> ｜ ${esc(o.nurse)} ｜ 箱 <b>${esc(o.boxCode)}</b>
+        <span class="muted">发放 ${esc(o.issuedAt)}（${esc(o.dispatcher)}）</span></div>
+      <div class="form-row" style="margin-top:6px">
+        <label>封条
+          <select id="seal_${o.id}"><option value="1">完好</option><option value="0">破损</option></select></label>
+        <label>温度 <input id="temp_${o.id}" type="number" step="0.1" style="width:70px" placeholder="°C"></label>
+        <label>重量 <input id="weight_${o.id}" type="number" step="0.01" style="width:70px" placeholder="kg"></label>
+        <button onclick="returnOrder('${o.id}')">归还登记</button>
+        <span class="msg err" id="rmsg_${o.id}"></span>
+      </div>
+    </div>`).join('') : '<div class="empty">暂无在途借单</div>';
+
+  // 复核区
+  const toReview = boxes.filter((b) => b.status === 'pending_review' || b.status === 'exception');
+  document.getElementById('reviewArea').innerHTML = toReview.length ? toReview.map((b) => {
+    const ret = returns.find((r) => r.boxId === b.id && orders.find((o) => o.id === r.orderId && o.status === 'returned'));
+    return `<div style="border:1px solid ${b.status === 'exception' ? '#fca5a5' : '#e5e7eb'};border-radius:8px;padding:10px;margin-bottom:8px">
+      <div><b>${esc(b.code)}</b> <span class="tag t-${b.status}">${BOX_STATUS[b.status]}</span></div>
+      ${ret ? `<div class="times">归还：封条${ret.sealIntact ? '完好' : '<b class="warn">破损</b>'}、温度 ${ret.temperature}°C、重量 ${ret.weight}kg ｜ ${esc(ret.returnedAt)}
+        ${ret.abnormal ? `<br><span class="warn">异常原因：${esc(ret.reasons.join('；'))}</span>` : ''}</div>` : ''}
+      <div class="review-box">
+        <input id="rv_${b.id}" placeholder="复核人" style="width:90px">
+        <input id="rc_${b.id}" placeholder="复核结论（必填，留痕）" style="flex:1;min-width:180px">
+        <button onclick="reviewBox('${b.id}','release')">复核放行</button>
+        <button class="danger" onclick="reviewBox('${b.id}','hold')">继续隔离</button>
+        <span class="msg err" id="vmsg_${b.id}"></span>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">暂无待复核或异常箱</div>';
+
+  // 已结束借单
+  const closed = orders.filter((o) => o.status === 'closed');
+  document.getElementById('closedOrders').innerHTML = closed.length ? `<table>
+    <thead><tr><th>单号</th><th>护士</th><th>箱号</th><th>提交</th><th>发放</th><th>归还</th><th>复核放行/结束</th></tr></thead>
+    <tbody>${closed.map((o) => `<tr>
+      <td>${esc(o.id)}</td><td>${esc(o.nurse)}</td><td>${esc(o.boxCode)}</td>
+      <td class="times">${esc(o.submittedAt)}</td><td class="times">${esc(o.issuedAt)}</td>
+      <td class="times">${esc(o.returnedAt)}</td><td class="times">${esc(o.closedAt)}</td>
+    </tr>`).join('')}</tbody></table>` : '<div class="empty">暂无已结束借单</div>';
+
+  // 流水
+  document.getElementById('eventLog').innerHTML = events.length
+    ? events.map((e) => `<li><span class="time">${esc(e.time)}</span><b>[${esc(e.type)}]</b> ${esc(e.message)}</li>`).join('')
+    : '<li class="empty">暂无记录</li>';
+}
+
+// ---- 操作 ----
+async function submitOrder() {
+  const msg = document.getElementById('submitMsg');
+  const { status, data } = await api('/api/orders', {
+    nurse: document.getElementById('fNurse').value,
+    requiredCapacity: document.getElementById('fCap').value,
+    note: document.getElementById('fNote').value,
+  });
+  msg.className = 'msg ' + (status === 201 ? 'ok' : 'err');
+  msg.textContent = status === 201 ? `已提交 ${data.order.id}，等待调度确认` : data.message;
+  if (status === 201) { document.getElementById('fNote').value = ''; }
+  await loadState();
+}
+
+async function confirmOrder(orderId) {
+  const boxId = document.getElementById('boxSel_' + orderId).value;
+  const msgEl = document.getElementById('msg_' + orderId);
+  const { status, data } = await api(`/api/orders/${orderId}/confirm`, {
+    boxId, dispatcher: document.getElementById('fDispatcher').value,
+  });
+  if (status === 409) {
+    // 同一箱被先确认 → 提示改派，刷新可用箱列表
+    msgEl.textContent = data.message + '（列表已刷新）';
+    await loadState();
+    return;
+  }
+  msgEl.textContent = status === 200 ? '' : data.message;
+  await loadState();
+}
+
+async function returnOrder(orderId) {
+  const msgEl = document.getElementById('rmsg_' + orderId);
+  const { status, data } = await api(`/api/orders/${orderId}/return`, {
+    sealIntact: document.getElementById('seal_' + orderId).value === '1',
+    temperature: document.getElementById('temp_' + orderId).value,
+    weight: document.getElementById('weight_' + orderId).value,
+  });
+  if (status !== 200) { msgEl.textContent = data.message; return; }
+  await loadState();
+}
+
+async function reviewBox(boxId, decision) {
+  const msgEl = document.getElementById('vmsg_' + boxId);
+  const { status, data } = await api(`/api/boxes/${boxId}/review`, {
+    reviewer: document.getElementById('rv_' + boxId).value,
+    conclusion: document.getElementById('rc_' + boxId).value,
+    decision,
+  });
+  if (status !== 200) { msgEl.textContent = data.message; return; }
+  await loadState();
+}
+
+loadState();
+setInterval(loadState, 4000); // 定时刷新，让后到的调度看到最新可用箱
+</script>
+</body>
+</html>

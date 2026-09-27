@@ -36,3 +36,6 @@ coverage/
 .vscode/
 __pycache__/
 *.py[cod]
+
+# 运行时数据
+data.json

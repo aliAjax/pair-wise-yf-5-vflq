@@ -1,0 +1,9 @@
+{
+  "name": "vaccine-coldbox-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "社区药房冷藏疫苗箱借还管理",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
